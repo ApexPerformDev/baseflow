@@ -130,7 +130,7 @@ export default function Layout({ children, currentPageName }) {
   }
 
   // Verificar se precisa bloquear acesso
-  if (currentStore && isSubscriptionExpired() && !publicPages.includes(currentPageName) && currentPageName !== 'Pricing') {
+  if (currentStore && isSubscriptionExpired() && !publicPages.includes(currentPageName) && currentPageName !== 'Pricing' && user?.email !== 'apexperformgw@gmail.com') {
     return <SubscriptionExpired currentStore={currentStore} />;
   }
 

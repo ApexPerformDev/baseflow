@@ -32,7 +32,7 @@ router.get("/api/hello", (ctx) => {
 // Registro de usuário
 router.post("/api/auth/register", async (ctx) => {
   try {
-    const body = await ctx.request.body({ type: "json" }).value;
+    const body = await ctx.request.body().value;
     const { email, password, name } = body;
 
     if (users.has(email)) {
@@ -74,7 +74,7 @@ router.post("/api/auth/register", async (ctx) => {
 // Login
 router.post("/api/auth/login", async (ctx) => {
   try {
-    const body = await ctx.request.body({ type: "json" }).value;
+    const body = await ctx.request.body().value;
     const { email, password } = body;
 
     const user = users.get(email);
@@ -145,7 +145,7 @@ router.post("/api/stores", async (ctx) => {
     const token = authHeader?.substring(7);
     const payload = await verify(token, key);
     
-    const body = await ctx.request.body({ type: "json" }).value;
+    const body = await ctx.request.body().value;
     const now = new Date();
     
     // Admin tem acesso ilimitado
@@ -225,7 +225,7 @@ router.put("/api/stores/:id", async (ctx) => {
     const payload = await verify(token, key);
     
     const storeId = ctx.params.id;
-    const body = await ctx.request.body({ type: "json" }).value;
+    const body = await ctx.request.body().value;
     
     const store = stores.get(storeId);
     if (!store) {
@@ -254,7 +254,7 @@ router.put("/api/stores/:id", async (ctx) => {
 // Stripe checkout session
 router.post("/api/stripe/create-checkout-session", async (ctx) => {
   try {
-    const body = await ctx.request.body({ type: "json" }).value;
+    const body = await ctx.request.body().value;
     const { priceId, userId, storeId, successUrl, cancelUrl } = body;
 
     // Simular criação de sessão Stripe
@@ -274,7 +274,7 @@ router.post("/api/stripe/create-checkout-session", async (ctx) => {
 // Webhook Stripe
 router.post("/api/stripe/webhook", async (ctx) => {
   try {
-    const body = await ctx.request.body({ type: "json" }).value;
+    const body = await ctx.request.body().value;
     
     if (body.type === "checkout.session.completed") {
       const { storeId } = body.data.object.metadata;
