@@ -23,15 +23,15 @@ import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 
 export default function Dashboard() {
   const [currentStore, setCurrentStore] = useState(null);
+  const [user, setUser] = useState(null);
   const [period, setPeriod] = useState('30');
 
   useEffect(() => {
+    base44.auth.me().then(setUser);
     const storeData = localStorage.getItem('currentStore');
-    if (!storeData) {
-      window.location.href = '/';
-      return;
+    if (storeData) {
+      setCurrentStore(JSON.parse(storeData));
     }
-    setCurrentStore(JSON.parse(storeData));
   }, []);
 
   // Check subscription status

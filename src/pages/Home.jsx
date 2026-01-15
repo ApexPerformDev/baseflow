@@ -15,9 +15,12 @@ export default function Home() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    base44.auth.me().then(u => setUser(u)).catch(() => {
-      window.location.href = '/';
-    });
+    base44.auth.me()
+      .then(u => setUser(u))
+      .catch(() => {
+        // MODO LOCAL: Não redirecionar em caso de erro
+        setUser({ email: 'local@test.com' });
+      });
   }, []);
 
   const { data: storeUsers = [], isLoading } = useQuery({
@@ -56,7 +59,8 @@ export default function Home() {
         subscription_status: 'TRIAL',
         trial_start_at: now.toISOString(),
         trial_end_at: trialEnd.toISOString(),
-        plan_type: 'basic'
+        plan_type: 'basic',
+        created_date: now.toISOString()
       });
 
       // Criar vínculo do usuário como admin
@@ -78,6 +82,7 @@ export default function Home() {
         id: store.id,
         name: store.name,
         subscription_status: store.subscription_status,
+        trial_end_at: store.trial_end_at,
         role: 'admin'
       }));
       window.location.href = createPageUrl('Dashboard');

@@ -10,10 +10,13 @@ import {
   X,
   Search,
   Plus,
-  Building2
+  Building2,
+  Crown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { base44 } from '@/api/base44Client';
+import SubscriptionExpired from '@/components/SubscriptionExpired';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function Layout({ children, currentPageName }) {
   const [currentStore, setCurrentStore] = useState(null);
@@ -22,31 +25,21 @@ export default function Layout({ children, currentPageName }) {
   const [allStores, setAllStores] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [theme, setTheme] = useState('dark');
+  const { logout } = useAuth();
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     setTheme(savedTheme);
     document.documentElement.classList.toggle('dark', savedTheme === 'dark');
     
-    // MODO LOCAL: Desabilitar autenticação
-    setUser({ email: 'local@test.com' });
+    base44.auth.me().then(setUser);
     
     const storeData = localStorage.getItem('currentStore');
     if (storeData) {
       setCurrentStore(JSON.parse(storeData));
-    } else {
-      // Criar store fake para modo local
-      const fakeStore = { id: '1', name: 'Loja Local', subscription_status: 'ACTIVE' };
-      setCurrentStore(fakeStore);
-      localStorage.setItem('currentStore', JSON.stringify(fakeStore));
     }
     
-    // MODO LOCAL: Desabilitar carregamento de lojas
-    // loadUserStores();
-    
-    // MODO LOCAL: Desabilitar interval
-    // const interval = setInterval(loadUserStores, 3000);
-    // return () => clearInterval(interval);
+    loadUserStores();
   }, []);
 
   const loadUserStores = async () => {
@@ -55,44 +48,32 @@ export default function Layout({ children, currentPageName }) {
       if (!u) return;
       
       const storeUsers = await base44.entities.StoreUser.filter({ user_email: u.email });
-      
-      // Guardar storeUsers em cache para usar ao trocar de empresa
-      localStorage.setItem('storeUsers', JSON.stringify(storeUsers));
-      
       const allStoresData = await base44.entities.Store.list();
       const userStores = allStoresData.filter(s => 
         storeUsers.some(su => su.store_id === s.id)
       );
       setAllStores(userStores);
       
-      // Atualizar currentStore no estado se ele existir na lista
+      // Atualizar currentStore se existir
       if (currentStore) {
         const updatedCurrentStore = userStores.find(s => s.id === currentStore.id);
         if (updatedCurrentStore) {
-          // Buscar role atual do usuário para esta loja
           const storeUserRole = storeUsers.find(su => su.store_id === currentStore.id);
           const newStoreData = {
-            ...currentStore,
-            logo_url: updatedCurrentStore.logo_url,
+            ...updatedCurrentStore,
             role: storeUserRole?.role || currentStore.role
           };
           
-          // Só atualizar se houver mudanças
-          if (newStoreData.logo_url !== currentStore.logo_url || newStoreData.role !== currentStore.role) {
-            setCurrentStore(newStoreData);
-            localStorage.setItem('currentStore', JSON.stringify(newStoreData));
-          }
+          setCurrentStore(newStoreData);
+          localStorage.setItem('currentStore', JSON.stringify(newStoreData));
         }
       }
     } catch (error) {
       console.error('Error loading stores:', error);
-      // Não fazer logout em caso de erro ao carregar stores
     }
   };
 
   const handleSelectStore = (store) => {
-    // Buscar role do usuário para esta loja
-    const storeUserData = allStores.find(s => s.id === store.id);
     const storeUsers = JSON.parse(localStorage.getItem('storeUsers') || '[]');
     const userRole = storeUsers.find(su => su.store_id === store.id && su.user_email === user?.email);
     
@@ -100,11 +81,35 @@ export default function Layout({ children, currentPageName }) {
       id: store.id,
       name: store.name,
       subscription_status: store.subscription_status,
+      trial_end_at: store.trial_end_at,
+      subscription_end_at: store.subscription_end_at,
       logo_url: store.logo_url,
       role: userRole?.role || 'basic'
     }));
     setShowStoreDrawer(false);
     window.location.href = createPageUrl('Dashboard');
+  };
+
+  // Verificar se a assinatura expirou
+  const isSubscriptionExpired = () => {
+    if (!currentStore) return false;
+    
+    // Trial expirado
+    if (currentStore.subscription_status === 'TRIAL' && currentStore.trial_end_at) {
+      return new Date() > new Date(currentStore.trial_end_at);
+    }
+    
+    // Assinatura expirada
+    if (['EXPIRED', 'CANCELLED'].includes(currentStore.subscription_status)) {
+      return true;
+    }
+    
+    return false;
+  };
+
+  const canAccessNuvemshop = () => {
+    if (!currentStore) return false;
+    return currentStore.subscription_status === 'ACTIVE';
   };
 
   const menuItems = [
@@ -114,25 +119,27 @@ export default function Layout({ children, currentPageName }) {
     { name: 'Configurações', icon: Settings, path: 'Settings' }
   ];
 
-  const publicPages = ['Login', 'Home'];
+  // Adicionar Admin para usuário admin
+  if (user?.email === 'admin@rfmanalytics.com') {
+    menuItems.push({ name: 'Admin', icon: Crown, path: 'Admin' });
+  }
+
+  const publicPages = ['Login', 'Register', 'Pricing'];
   if (publicPages.includes(currentPageName)) {
     return <div className="min-h-screen">{children}</div>;
+  }
+
+  // Verificar se precisa bloquear acesso
+  if (currentStore && isSubscriptionExpired() && !publicPages.includes(currentPageName) && currentPageName !== 'Pricing') {
+    return <SubscriptionExpired currentStore={currentStore} />;
   }
 
   const filteredStores = allStores.filter(store => 
     store.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.classList.toggle('dark', newTheme === 'dark');
-  };
-
   return (
     <div className="min-h-screen bg-[#F5F5F5] dark:bg-[#1A1A1A]">
-
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-screen w-[70px] bg-white dark:bg-[#1C1C1C] border-r border-[#E5E5E5] dark:border-[#2D2D2D] z-50 flex flex-col items-center py-6">
         {/* Logo */}
@@ -146,13 +153,19 @@ export default function Layout({ children, currentPageName }) {
         {currentStore && (
           <button
             onClick={() => setShowStoreDrawer(true)}
-            className="mb-6 w-10 h-10 rounded-full bg-[#3B82F6] flex items-center justify-center text-white font-semibold hover:bg-[#4C8DFF] transition-colors overflow-hidden"
+            className="mb-6 w-10 h-10 rounded-full bg-[#3B82F6] flex items-center justify-center text-white font-semibold hover:bg-[#4C8DFF] transition-colors overflow-hidden relative"
           >
             {currentStore.logo_url ? (
               <img src={currentStore.logo_url} alt={currentStore.name} className="w-full h-full object-cover" />
             ) : (
               currentStore.name.charAt(0).toUpperCase()
             )}
+            {/* Indicador de status */}
+            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+              currentStore.subscription_status === 'ACTIVE' ? 'bg-green-500' :
+              currentStore.subscription_status === 'TRIAL' ? 'bg-yellow-500' :
+              'bg-red-500'
+            }`}></div>
           </button>
         )}
 
@@ -183,17 +196,17 @@ export default function Layout({ children, currentPageName }) {
 
         {/* User Avatar */}
         {user && (
-          <Link
-            to={createPageUrl('Profile')}
+          <button
+            onClick={logout}
             className="w-10 h-10 rounded-full bg-[#E5E5E5] dark:bg-[#2D2D2D] flex items-center justify-center text-[#1F2937] dark:text-white text-sm font-medium hover:bg-[#D1D5DB] dark:hover:bg-[#3A3A3A] transition-colors overflow-hidden"
-            title="Perfil"
+            title="Sair"
           >
             {user.profile_picture ? (
               <img src={user.profile_picture} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               user.email?.charAt(0).toUpperCase()
             )}
-          </Link>
+          </button>
         )}
       </aside>
 
@@ -243,20 +256,25 @@ export default function Layout({ children, currentPageName }) {
                         : 'hover:bg-[#F3F4F6] dark:hover:bg-[#2D2D2D]'
                     }`}
                   >
-                    <div className="w-8 h-8 rounded-full bg-[#3B82F6] flex items-center justify-center text-white font-semibold flex-shrink-0 overflow-hidden">
+                    <div className="w-8 h-8 rounded-full bg-[#3B82F6] flex items-center justify-center text-white font-semibold flex-shrink-0 overflow-hidden relative">
                       {store.logo_url ? (
                         <img src={store.logo_url} alt={store.name} className="w-full h-full object-cover" />
                       ) : (
                         store.name.charAt(0).toUpperCase()
                       )}
+                      <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${
+                        store.subscription_status === 'ACTIVE' ? 'bg-green-500' :
+                        store.subscription_status === 'TRIAL' ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}></div>
                     </div>
                     <div className="flex-1 text-left">
                       <div className="text-[#1F2937] dark:text-white font-medium text-sm">{store.name}</div>
-                      <div className="text-[#6B7280] dark:text-[#9CA3AF] text-xs">Plano {store.plan_type || 'Básico'}</div>
+                      <div className="text-[#6B7280] dark:text-[#9CA3AF] text-xs">
+                        {store.subscription_status === 'ACTIVE' ? 'Ativa' :
+                         store.subscription_status === 'TRIAL' ? 'Trial' : 'Expirada'}
+                      </div>
                     </div>
-                    {store.subscription_status === 'ACTIVE' && (
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    )}
                   </button>
                 ))}
               </div>
