@@ -147,15 +147,19 @@ router.post("/api/stores", async (ctx) => {
     
     const body = await ctx.request.body({ type: "json" }).value;
     const now = new Date();
-    const trialEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    
+    // Admin tem acesso ilimitado
+    const isAdmin = payload.email === 'apexperformgw@gmail.com';
     
     const store = {
       id: crypto.randomUUID(),
       ...body,
-      subscription_status: 'TRIAL',
+      subscription_status: isAdmin ? 'ACTIVE' : 'TRIAL',
       trial_start_at: now.toISOString(),
-      trial_end_at: trialEnd.toISOString(),
-      plan_type: 'basic',
+      trial_end_at: isAdmin ? null : new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      subscription_start_at: isAdmin ? now.toISOString() : null,
+      subscription_end_at: isAdmin ? null : null,
+      plan_type: isAdmin ? 'enterprise' : 'basic',
       created_date: now.toISOString()
     };
     
