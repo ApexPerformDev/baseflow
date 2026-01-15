@@ -4,6 +4,19 @@ class Base44Client {
   constructor() {
     this.token = localStorage.getItem("auth_token");
 
+    // Helper para criar handlers de integração (Garante que 'this' funcione e evita repetição)
+    const createIntegrationHandler = (name) => ({
+      getAuthUrl: async () => {
+        return this.request(`/integrations/${name.toLowerCase()}/auth-url`);
+      },
+      invoke: async (action, data) => {
+        return this.request(`/integrations/${name.toLowerCase()}/${action}`, {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+      },
+    });
+
     // Configuração dinâmica para Integrations (Resolve o erro de undefined para qualquer nome)
     const manualIntegrations = {
       Core: {
@@ -14,6 +27,11 @@ class Base44Client {
           });
         },
       },
+      // Definições explícitas para garantir compatibilidade com desestruturação e spread operator {...}
+      Nuvemshop: createIntegrationHandler('nuvemshop'),
+      nuvemshop: createIntegrationHandler('nuvemshop'),
+      NuvemShop: createIntegrationHandler('nuvemshop'),
+      nuvem_shop: createIntegrationHandler('nuvemshop'),
     };
 
     this.integrations = new Proxy(manualIntegrations, {
@@ -113,6 +131,15 @@ class Base44Client {
     },
   };
 
+  functions = {
+    invoke: async (functionName, data) => {
+      return this.request(`/functions/${functionName}`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+  };
+
   entities = {
     Store: {
       create: async (storeData) => {
@@ -141,6 +168,24 @@ class Base44Client {
     StoreUser: {
       filter: async (filters) => {
         return this.request("/store-users");
+      },
+    },
+
+    Integration: {
+      create: async (data) => {
+        return this.request("/integrations", {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+      },
+      filter: async (filters) => {
+        const query = filters ? '?' + new URLSearchParams(filters).toString() : '';
+        return this.request(`/integrations${query}`);
+      },
+      delete: async (id) => {
+        return this.request(`/integrations/${id}`, {
+          method: "DELETE",
+        });
       },
     },
 
