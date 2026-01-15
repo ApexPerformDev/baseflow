@@ -6,12 +6,11 @@ import { crypto } from "https://deno.land/std@0.208.0/crypto/mod.ts";
 const app = new Application();
 const router = new Router();
 
-// 1. Configurações e Credenciais
+// --- CONFIGURAÇÕES ---
 const NUVEMSHOP_APP_ID = "25051";
 const NUVEMSHOP_CLIENT_SECRET = "b497856ad65ae4ebc58762fd2c032e4933b2c0171edc785c";
 const FRONTEND_URL = "https://baseflow-jade.vercel.app";
 
-// JWT Key
 const key = await crypto.subtle.importKey(
   "raw",
   new TextEncoder().encode("your-secret-key-here"),
@@ -20,100 +19,120 @@ const key = await crypto.subtle.importKey(
   ["sign", "verify"]
 );
 
-// Armazenamento em Memória (e tentativa de KV)
+// --- STORAGE (Deno KV + Memory Fallback) ---
 const users = new Map();
 const stores = new Map();
 const storeUsers = new Map();
 
-let kv = null;
+let kv: any = null;
 try {
   kv = await Deno.openKv();
-  console.log("✅ Deno KV conectado");
+  for await (const entry of kv.list({ prefix: ["users"] })) users.set(entry.key[1], entry.value);
+  for await (const entry of kv.list({ prefix: ["stores"] })) stores.set(entry.key[1], entry.value);
 } catch (e) {
-  console.log("⚠️ Deno KV não disponível, usando memória");
+  console.log("Usando armazenamento em memória");
 }
 
-// 2. Middleware de Erro e CORS
-app.use(async (ctx, next) => {
-  try { await next(); } catch (err) {
-    console.error('Server error:', err);
-    ctx.response.status = 500;
-    ctx.response.body = { error: 'Internal server error' };
-  }
-});
+async function saveUser(email: string, user: any) {
+  users.set(email, user);
+  if (kv) await kv.set(["users", email], user);
+}
 
+// --- MIDDLEWARES ---
 app.use(oakCors({
-  origin: [FRONTEND_URL, "http://localhost:3000", "http://localhost:5173"],
+  origin: [FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"],
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// 3. Rotas de Autenticação Nuvemshop (CORREÇÃO DO 404)
-
-// Inicia o processo de conexão
-router.get("/api/nuvemshop/auth", (ctx) => {
-  // Redireciona o usuário para a página de permissão da Nuvemshop
-  const url = `https://www.nuvemshop.com.br/apps/${NUVEMSHOP_APP_ID}/authorize?scope=write_products,read_orders`;
-  ctx.response.redirect(url);
-});
-
-// Recebe o código após o usuário autorizar
-router.get("/api/nuvemshop/callback", async (ctx) => {
-  const code = ctx.request.url.searchParams.get('code');
-  
-  if (!code) {
-    ctx.response.redirect(`${FRONTEND_URL}/nuvemshop/error?error=no_code`);
-    return;
-  }
-  
-  try {
-    const tokenResponse = await fetch('https://www.nuvemshop.com.br/apps/authorize/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: NUVEMSHOP_APP_ID,
-        client_secret: NUVEMSHOP_CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code: code
-      })
-    });
-    
-    const tokenData = await tokenResponse.json();
-    
-    if (tokenData.access_token) {
-      // Aqui você salvaria o token no seu banco de dados
-      ctx.response.redirect(`${FRONTEND_URL}/nuvemshop/success?token=${tokenData.access_token}&store_id=${tokenData.user_id}`);
-    } else {
-      ctx.response.redirect(`${FRONTEND_URL}/nuvemshop/error?error=token_failed`);
-    }
-  } catch (error) {
-    ctx.response.redirect(`${FRONTEND_URL}/nuvemshop/error?error=server_error`);
-  }
-});
-
-// 4. Outras Rotas (Auth, Hello, Webhooks)
-router.get("/api/hello", (ctx) => {
-  ctx.response.body = { 
-    message: "API OK", 
-    timestamp: new Date().toISOString(),
-    env: "Deno Deploy"
-  };
-});
+// --- ROTAS DE AUTH (Login/Register) ---
 
 router.post("/api/auth/register", async (ctx) => {
-  const { email, password, name } = await ctx.request.body({ type: "json" }).value;
+  const body = await ctx.request.body({ type: "json" }).value;
+  const { email, password, name } = body;
+
+  if (users.has(email)) {
+    ctx.response.status = 400;
+    ctx.response.body = { error: "Usuário já existe" };
+    return;
+  }
+
   const hashedPassword = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password));
-  const user = { id: crypto.randomUUID(), email, name, password: Array.from(new Uint8Array(hashedPassword)).map(b => b.toString(16).padStart(2, '0')).join(''), created_at: new Date().toISOString() };
-  users.set(email, user);
+  const passwordHash = Array.from(new Uint8Array(hashedPassword)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  const user = {
+    id: crypto.randomUUID(),
+    email, name,
+    password: passwordHash,
+    created_at: new Date().toISOString()
+  };
+
+  await saveUser(email, user);
   const token = await create({ alg: "HS256", typ: "JWT" }, { userId: user.id, email, exp: Math.floor(Date.now() / 1000) + 2592000 }, key);
   ctx.response.body = { user: { id: user.id, email, name }, token };
 });
 
-// LGPD Webhooks
-router.post("/api/webhooks/store/redact", (ctx) => { ctx.response.body = { status: "success" }; });
-router.post("/api/webhooks/customers/redact", (ctx) => { ctx.response.body = { status: "success" }; });
+router.post("/api/auth/login", async (ctx) => {
+  const body = await ctx.request.body({ type: "json" }).value;
+  const { email, password } = body;
+  const user = users.get(email);
 
-// Aplicação das Rotas
+  if (!user) {
+    ctx.response.status = 401;
+    ctx.response.body = { error: "Credenciais inválidas" };
+    return;
+  }
+
+  const hashedPassword = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password));
+  const passwordHash = Array.from(new Uint8Array(hashedPassword)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  if (user.password !== passwordHash) {
+    ctx.response.status = 401;
+    ctx.response.body = { error: "Credenciais inválidas" };
+    return;
+  }
+
+  const token = await create({ alg: "HS256", typ: "JWT" }, { userId: user.id, email, exp: Math.floor(Date.now() / 1000) + 2592000 }, key);
+  ctx.response.body = { user: { id: user.id, email, name: user.name }, token };
+});
+
+// --- ROTAS NUVEMSHOP ---
+
+router.get("/api/nuvemshop/auth", (ctx) => {
+  const url = `https://www.nuvemshop.com.br/apps/${NUVEMSHOP_APP_ID}/authorize?scope=write_products,read_orders`;
+  ctx.response.redirect(url);
+});
+
+router.get("/api/nuvemshop/callback", async (ctx) => {
+  const code = ctx.request.url.searchParams.get('code');
+  if (!code) {
+    ctx.response.redirect(`${FRONTEND_URL}/nuvemshop/error?error=no_code`);
+    return;
+  }
+
+  const tokenResponse = await fetch('https://www.nuvemshop.com.br/apps/authorize/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: NUVEMSHOP_APP_ID,
+      client_secret: NUVEMSHOP_CLIENT_SECRET,
+      grant_type: 'authorization_code',
+      code: code
+    })
+  });
+
+  const tokenData = await tokenResponse.json();
+  if (tokenData.access_token) {
+    ctx.response.redirect(`${FRONTEND_URL}/nuvemshop/success?token=${tokenData.access_token}&store_id=${tokenData.user_id}`);
+  } else {
+    ctx.response.redirect(`${FRONTEND_URL}/nuvemshop/error?error=token_failed`);
+  }
+});
+
+router.get("/api/hello", (ctx) => {
+  ctx.response.body = { message: "API OK", users: users.size };
+});
+
 app.use(router.routes());
 app.use(router.allowedMethods());
 
