@@ -48,7 +48,9 @@ export default function Settings() {
     queryKey: ["store", currentStore?.id],
     queryFn: async () => {
       if (!currentStore?.id) return null;
-      return await base44.entities.Store.get(currentStore.id);
+      // Revertendo para .list() pois o endpoint .get() retornou 405 (Method Not Allowed)
+      const stores = await base44.entities.Store.list();
+      return stores.find((s) => s.id === currentStore.id);
     },
     enabled: !!currentStore?.id,
     retry: 1,
