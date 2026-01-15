@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Store,
   CreditCard,
@@ -38,13 +39,19 @@ export default function Settings() {
       });
   }, []);
 
-  const { data: storeDetails } = useQuery({
+  const {
+    data: storeDetails,
+    isLoading: isLoadingStore,
+    isError: isStoreError,
+    error: storeError,
+  } = useQuery({
     queryKey: ["store", currentStore?.id],
     queryFn: async () => {
       if (!currentStore?.id) return null;
       return await base44.entities.Store.get(currentStore.id);
     },
     enabled: !!currentStore?.id,
+    retry: 1,
   });
 
   const { data: integrations = [] } = useQuery({
@@ -440,8 +447,30 @@ Estatísticas:
     await updateUserRoleMutation.mutateAsync({ user_email, new_role });
   };
 
-  if (!currentStore || !storeDetails) {
-    return <div className="text-center py-20">Carregando...</div>;
+  if (!currentStore) {
+    return <div className="text-center py-20">Carregando configurações...</div>;
+  }
+
+  if (isLoadingStore) {
+    return (
+      <div className="text-center py-20">Carregando detalhes da loja...</div>
+    );
+  }
+
+  if (isStoreError || !storeDetails) {
+    return (
+      <div className="text-center py-20">
+        <h3 className="text-lg font-semibold text-red-600">
+          Erro ao carregar dados da loja
+        </h3>
+        <p className="text-gray-500 mb-4">
+          {storeError?.message || "Não foi possível obter os detalhes da loja."}
+        </p>
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Tentar Novamente
+        </Button>
+      </div>
+    );
   }
 
   const isAdmin = currentStore.role === "admin";
