@@ -1,6 +1,6 @@
 import { Application, Router } from "https://deno.land/x/oak@v12.6.1/mod.ts";
 import { oakCors } from "https://deno.land/x/cors@v1.2.2/mod.ts";
-import { create, verify } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
+import { create } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 import { crypto } from "https://deno.land/std@0.208.0/crypto/mod.ts";
 
 const app = new Application();
@@ -19,33 +19,33 @@ const key = await crypto.subtle.importKey(
   ["sign", "verify"]
 );
 
-// --- STORAGE (Deno KV + Memory Fallback) ---
+// --- STORAGE (Deno KV) ---
 const users = new Map();
 const stores = new Map();
-const storeUsers = new Map();
 
-let kv: any = null;
-try {
-  kv = await Deno.openKv();
-  for await (const entry of kv.list({ prefix: ["users"] })) users.set(entry.key[1], entry.value);
-  for await (const entry of kv.list({ prefix: ["stores"] })) stores.set(entry.key[1], entry.value);
-} catch (e) {
-  console.log("Usando armazenamento em memória");
+// Inicialização segura do KV para não perder usuários no deploy
+const kv = await Deno.openKv();
+async function syncFromKv() {
+  for await (const entry of kv.list({ prefix: ["users"] })) {
+    users.set(entry.key[1], entry.value);
+  }
 }
+await syncFromKv();
 
 async function saveUser(email: string, user: any) {
   users.set(email, user);
-  if (kv) await kv.set(["users", email], user);
+  await kv.set(["users", email], user);
 }
 
-// --- MIDDLEWARES ---
+// --- MIDDLEWARES (CORREÇÃO DE CORS) ---
 app.use(oakCors({
   origin: [FRONTEND_URL, "http://localhost:5173", "http://localhost:3000"],
+  methods: "GET,POST,PUT,DELETE,OPTIONS",
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// --- ROTAS DE AUTH (Login/Register) ---
+// --- ROTAS DE AUTH ---
 
 router.post("/api/auth/register", async (ctx) => {
   const body = await ctx.request.body({ type: "json" }).value;
@@ -99,8 +99,7 @@ router.post("/api/auth/login", async (ctx) => {
 // --- ROTAS NUVEMSHOP ---
 
 router.get("/api/nuvemshop/auth", (ctx) => {
-  const url = `https://www.nuvemshop.com.br/apps/${NUVEMSHOP_APP_ID}/authorize?scope=write_products,read_orders`;
-  ctx.response.redirect(url);
+  ctx.response.redirect(`https://www.nuvemshop.com.br/apps/${NUVEMSHOP_APP_ID}/authorize?scope=write_products,read_orders`);
 });
 
 router.get("/api/nuvemshop/callback", async (ctx) => {

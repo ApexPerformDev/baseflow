@@ -1,14 +1,18 @@
-const API_BASE_URL = "https://apexperform-baseflow-10.deno.dev/api";
+// Localização sugerida: src/api/base44Client.js
+
+// Prioriza a variável de ambiente da Vercel, com fallback para o link direto do Deno
+const API_BASE_URL = (import.meta.env.VITE_API_URL || "https://apexperform-baseflow-10.deno.dev") + "/api";
 
 class Base44Client {
   constructor() {
+    // Busca o token salvo para manter a sessão ativa ao recarregar
     this.token = localStorage.getItem("auth_token");
 
-    // Helper ajustado para bater com as rotas do seu servidor Deno
+    // Helper para rotas de integração (Nuvemshop, etc)
     const createIntegrationHandler = (name) => ({
       getAuthUrl: async (params) => {
-        // Ajustado: Removido o prefixo extra para alinhar com o router.get("/api/nuvemshop/auth")
-        return this.request(`/${name.toLowerCase()}/auth`);
+        const query = params ? "?" + new URLSearchParams(params).toString() : "";
+        return this.request(`/${name.toLowerCase()}/auth${query}`);
       },
       invoke: async (action, data) => {
         return this.request(`/${name.toLowerCase()}/${action}`, {
@@ -27,7 +31,6 @@ class Base44Client {
           });
         },
       },
-      // Definições para Nuvemshop
       Nuvemshop: createIntegrationHandler("nuvemshop"),
       nuvemshop: createIntegrationHandler("nuvemshop"),
       NuvemShop: createIntegrationHandler("nuvemshop"),
@@ -37,30 +40,7 @@ class Base44Client {
     this.integrations = new Proxy(manualIntegrations, {
       get: (target, prop) => {
         if (prop in target) return target[prop];
-
-        if (prop === "invoke") {
-          return async (integration, action, data) => {
-            return this.request(`/${integration}/${action}`, {
-              method: "POST",
-              body: JSON.stringify(data),
-            });
-          };
-        }
-
-        return {
-          getAuthUrl: async (params) => {
-            return this.request(`/${String(prop).toLowerCase()}/auth`);
-          },
-          invoke: async (action, data) => {
-            return this.request(
-              `/${String(prop).toLowerCase()}/${action}`,
-              {
-                method: "POST",
-                body: JSON.stringify(data),
-              }
-            );
-          },
-        };
+        return createIntegrationHandler(String(prop));
       },
     });
   }
@@ -91,7 +71,7 @@ class Base44Client {
       headers,
     });
 
-    // Se o backend enviar um redirect (como na Nuvemshop), tratamos aqui
+    // Se o backend enviar um redirect (muito comum no fluxo da Nuvemshop)
     if (response.redirected) {
       window.location.href = response.url;
       return;
@@ -100,8 +80,8 @@ class Base44Client {
     if (!response.ok) {
       const error = await response
         .json()
-        .catch(() => ({ error: `HTTP ${response.status}` }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+        .catch(() => ({ error: `Erro HTTP: ${response.status}` }));
+      throw new Error(error.error || `Erro HTTP: ${response.status}`);
     }
 
     return response.json();
@@ -122,7 +102,9 @@ class Base44Client {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      this.setToken(response.token);
+      if (response.token) {
+        this.setToken(response.token);
+      }
       return response.user;
     },
 
@@ -132,6 +114,7 @@ class Base44Client {
 
     logout: () => {
       this.clearToken();
+      window.location.href = '/login';
     },
   };
 
