@@ -84,7 +84,7 @@ export default function IntegrationCard({
   const handleNuvemshopOAuth = async () => {
     setLoading(true);
     try {
-      const response = await base44.functions.invoke("nuvemshopConnect", {
+      const response = await base44.integrations.nuvemshop.invoke("auth-url", {
         store_id: storeId,
       });
 
@@ -125,7 +125,7 @@ export default function IntegrationCard({
     if (integration.type === "NUVEMSHOP") {
       setLoading(true);
       try {
-        await base44.functions.invoke("nuvemshopDisconnect", {
+        await base44.integrations.nuvemshop.invoke("disconnect", {
           store_id: storeId,
         });
         alert("Nuvemshop desconectada com sucesso!");
