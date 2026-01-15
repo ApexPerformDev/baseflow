@@ -1,5 +1,5 @@
-import { Application, Router } from "https://deno.land/x/oak/mod.ts";
-import { oakCors } from "https://deno.land/x/cors/mod.ts";
+import { Application, Router } from "https://deno.land/x/oak@v12.6.1/mod.ts";
+import { oakCors } from "https://deno.land/x/cors@v1.2.2/mod.ts";
 import { create, verify } from "https://deno.land/x/djwt@v3.0.1/mod.ts";
 import { crypto } from "https://deno.land/std@0.208.0/crypto/mod.ts";
 
@@ -32,7 +32,7 @@ router.get("/api/hello", (ctx) => {
 // Registro de usuário
 router.post("/api/auth/register", async (ctx) => {
   try {
-    const body = await ctx.request.body().value;
+    const body = await ctx.request.body({ type: "json" }).value;
     const { email, password, name } = body;
 
     if (users.has(email)) {
@@ -41,7 +41,6 @@ router.post("/api/auth/register", async (ctx) => {
       return;
     }
 
-    // Hash da senha (em produção, use bcrypt)
     const hashedPassword = await crypto.subtle.digest(
       "SHA-256",
       new TextEncoder().encode(password)
@@ -57,7 +56,6 @@ router.post("/api/auth/register", async (ctx) => {
 
     users.set(email, user);
 
-    // Criar JWT
     const token = await create(
       { alg: "HS256", typ: "JWT" },
       { userId: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 30) },
@@ -74,7 +72,7 @@ router.post("/api/auth/register", async (ctx) => {
 // Login
 router.post("/api/auth/login", async (ctx) => {
   try {
-    const body = await ctx.request.body().value;
+    const body = await ctx.request.body({ type: "json" }).value;
     const { email, password } = body;
 
     const user = users.get(email);
@@ -84,7 +82,6 @@ router.post("/api/auth/login", async (ctx) => {
       return;
     }
 
-    // Verificar senha
     const hashedPassword = await crypto.subtle.digest(
       "SHA-256",
       new TextEncoder().encode(password)
@@ -97,7 +94,6 @@ router.post("/api/auth/login", async (ctx) => {
       return;
     }
 
-    // Criar JWT
     const token = await create(
       { alg: "HS256", typ: "JWT" },
       { userId: user.id, email: user.email, exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 30) },
@@ -145,10 +141,9 @@ router.post("/api/stores", async (ctx) => {
     const token = authHeader?.substring(7);
     const payload = await verify(token, key);
     
-    const body = await ctx.request.body().value;
+    const body = await ctx.request.body({ type: "json" }).value;
     const now = new Date();
     
-    // Admin tem acesso ilimitado
     const isAdmin = payload.email === 'apexperformgw@gmail.com';
     
     const store = {
@@ -165,7 +160,6 @@ router.post("/api/stores", async (ctx) => {
     
     stores.set(store.id, store);
     
-    // Criar vínculo usuário-loja
     const storeUserKey = `${store.id}-${payload.userId}`;
     storeUsers.set(storeUserKey, {
       store_id: store.id,
@@ -181,7 +175,7 @@ router.post("/api/stores", async (ctx) => {
   }
 });
 
-// Listar lojas do usuário
+// Listar lojas
 router.get("/api/stores", async (ctx) => {
   try {
     const authHeader = ctx.request.headers.get("Authorization");
@@ -200,7 +194,7 @@ router.get("/api/stores", async (ctx) => {
   }
 });
 
-// Listar vínculos usuário-loja
+// Listar vínculos
 router.get("/api/store-users", async (ctx) => {
   try {
     const authHeader = ctx.request.headers.get("Authorization");
@@ -217,7 +211,7 @@ router.get("/api/store-users", async (ctx) => {
   }
 });
 
-// Atualizar loja (para admin)
+// Atualizar loja
 router.put("/api/stores/:id", async (ctx) => {
   try {
     const authHeader = ctx.request.headers.get("Authorization");
@@ -225,7 +219,7 @@ router.put("/api/stores/:id", async (ctx) => {
     const payload = await verify(token, key);
     
     const storeId = ctx.params.id;
-    const body = await ctx.request.body().value;
+    const body = await ctx.request.body({ type: "json" }).value;
     
     const store = stores.get(storeId);
     if (!store) {
@@ -234,7 +228,6 @@ router.put("/api/stores/:id", async (ctx) => {
       return;
     }
     
-    // Verificar se é admin
     if (payload.email !== 'apexperformgw@gmail.com') {
       ctx.response.status = 403;
       ctx.response.body = { error: "Acesso negado" };
@@ -251,64 +244,9 @@ router.put("/api/stores/:id", async (ctx) => {
   }
 });
 
-// Stripe checkout session
-router.post("/api/stripe/create-checkout-session", async (ctx) => {
-  try {
-    const body = await ctx.request.body().value;
-    const { priceId, userId, storeId, successUrl, cancelUrl } = body;
-
-    // Simular criação de sessão Stripe
-    const sessionId = crypto.randomUUID();
-    const checkoutUrl = `https://checkout.stripe.com/pay/${sessionId}`;
-    
-    ctx.response.body = {
-      url: checkoutUrl,
-      sessionId: sessionId
-    };
-  } catch (error) {
-    ctx.response.status = 500;
-    ctx.response.body = { error: error.message };
-  }
-});
-
-// Webhook Stripe
-router.post("/api/stripe/webhook", async (ctx) => {
-  try {
-    const body = await ctx.request.body().value;
-    
-    if (body.type === "checkout.session.completed") {
-      const { storeId } = body.data.object.metadata;
-      
-      if (storeId && stores.has(storeId)) {
-        const store = stores.get(storeId);
-        const now = new Date();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 1);
-        
-        const updatedStore = {
-          ...store,
-          subscription_status: 'ACTIVE',
-          subscription_start_at: now.toISOString(),
-          subscription_end_at: endDate.toISOString()
-        };
-        
-        stores.set(storeId, updatedStore);
-      }
-    }
-    
-    ctx.response.body = { received: true };
-  } catch (error) {
-    ctx.response.status = 400;
-    ctx.response.body = { error: error.message };
-  }
-});
-
 app.use(oakCors()); 
 app.use(router.routes());
 app.use(router.allowedMethods());
 
 console.log("Servidor Deno rodando na porta 8000...");
-console.log("Usuários cadastrados:", users.size);
-console.log("Lojas cadastradas:", stores.size);
-
 await app.listen({ port: 8000 });

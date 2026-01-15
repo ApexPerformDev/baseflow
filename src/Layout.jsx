@@ -32,7 +32,7 @@ export default function Layout({ children, currentPageName }) {
     setTheme(savedTheme);
     document.documentElement.classList.toggle('dark', savedTheme === 'dark');
     
-    base44.auth.me().then(setUser);
+    base44.auth.me().then(setUser).catch(() => console.log('Não autenticado'));
     
     const storeData = localStorage.getItem('currentStore');
     if (storeData) {

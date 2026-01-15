@@ -50,34 +50,13 @@ export default function Home() {
 
   const createStoreMutation = useMutation({
     mutationFn: async (storeData) => {
-      // Criar a loja com trial de 1 dia
-      const now = new Date();
-      const trialEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +1 dia
-
-      const store = await base44.entities.Store.create({
-        ...storeData,
-        subscription_status: 'TRIAL',
-        trial_start_at: now.toISOString(),
-        trial_end_at: trialEnd.toISOString(),
-        plan_type: 'basic',
-        created_date: now.toISOString()
-      });
-
-      // Criar vínculo do usuário como admin
-      await base44.entities.StoreUser.create({
-        store_id: store.id,
-        user_email: user.email,
-        role: 'admin',
-        accepted_at: now.toISOString()
-      });
-
+      const store = await base44.entities.Store.create(storeData);
       return store;
     },
     onSuccess: async (store) => {
       await queryClient.invalidateQueries({ queryKey: ['storeUsers'] });
       await queryClient.invalidateQueries({ queryKey: ['stores'] });
       
-      // Redirecionar automaticamente para o dashboard com role admin
       localStorage.setItem('currentStore', JSON.stringify({
         id: store.id,
         name: store.name,
