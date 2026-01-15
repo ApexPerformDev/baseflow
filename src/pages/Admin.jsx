@@ -112,7 +112,7 @@ export default function Admin() {
     return <Badge className={badge.className}>{badge.label}</Badge>;
   };
 
-  if (!user || user.email !== 'seu@email.com') {
+  if (!user || user.email !== 'apexperformgw@gmail.com') {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Alert variant="destructive" className="max-w-md">

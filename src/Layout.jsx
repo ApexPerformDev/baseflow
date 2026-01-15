@@ -120,7 +120,7 @@ export default function Layout({ children, currentPageName }) {
   ];
 
   // Adicionar Admin para usuário admin
-  if (user?.email === 'seu@email.com') {
+  if (user?.email === 'apexperformgw@gmail.com') {
     menuItems.push({ name: 'Admin', icon: Crown, path: 'Admin' });
   }
 
