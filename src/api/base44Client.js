@@ -138,6 +138,18 @@ class Base44Client {
           body: JSON.stringify(data)
         });
       }
+    },
+
+    nuvemshop: {
+      getAuthUrl: async () => {
+        return this.request('/integrations/nuvemshop/auth-url');
+      },
+      invoke: async (action, data) => {
+        return this.request(`/integrations/nuvemshop/${action}`, {
+          method: 'POST',
+          body: JSON.stringify(data)
+        });
+      }
     }
   };
 }
