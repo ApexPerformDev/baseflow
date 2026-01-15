@@ -28,7 +28,7 @@ export default function Admin() {
     base44.auth.me().then(u => {
       setUser(u);
       // Verificar se é admin
-      if (u.email !== 'admin@rfmanalytics.com') {
+      if (u.email !== 'apexperformgw@gmail.com') {
         window.location.href = '/';
       }
     });
@@ -112,7 +112,7 @@ export default function Admin() {
     return <Badge className={badge.className}>{badge.label}</Badge>;
   };
 
-  if (!user || user.email !== 'admin@rfmanalytics.com') {
+  if (!user || user.email !== 'seu@email.com') {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Alert variant="destructive" className="max-w-md">
