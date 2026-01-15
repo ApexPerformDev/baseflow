@@ -9,6 +9,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
+import AuthSuccess from './pages/AuthSuccess';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -46,6 +47,7 @@ const AuthenticatedApp = () => {
       <Routes>
         <Route path="/Login" element={<Pages.Login />} />
         <Route path="/Register" element={<Pages.Register />} />
+        <Route path="/auth-success" element={<AuthSuccess />} />
         <Route path="*" element={<Pages.Login />} />
       </Routes>
     );
@@ -59,6 +61,8 @@ const AuthenticatedApp = () => {
           <MainPage />
         </LayoutWrapper>
       } />
+      {/* Rota para o callback da Nuvemshop (Popup) */}
+      <Route path="/auth-success" element={<AuthSuccess />} />
       {Object.entries(Pages).map(([path, Page]) => (
         <Route
           key={path}
