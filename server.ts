@@ -16,6 +16,10 @@ const key = await crypto.subtle.importKey(
   ["sign", "verify"]
 );
 
+// Nuvemshop credentials
+const NUVEMSHOP_APP_ID = "25051";
+const NUVEMSHOP_CLIENT_SECRET = "b497856ad65ae4ebc58762fd2c032e4933b2c0171edc785c";
+
 // Simulação de banco de dados em memória (em produção, use Deno KV ou PostgreSQL)
 const users = new Map();
 const stores = new Map();
@@ -136,15 +140,30 @@ router.get("/api/auth/me", async (ctx) => {
 
 // Criar loja
 router.post("/api/stores", async (ctx) => {
+  console.log("📝 Recebida requisição POST /api/stores");
+  console.log("Headers:", Object.fromEntries(ctx.request.headers.entries()));
+  
   try {
     const authHeader = ctx.request.headers.get("Authorization");
-    const token = authHeader?.substring(7);
+    console.log("🔑 Auth header:", authHeader);
+    
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("❌ Token não fornecido");
+      ctx.response.status = 401;
+      ctx.response.body = { error: "Token não fornecido" };
+      return;
+    }
+    
+    const token = authHeader.substring(7);
     const payload = await verify(token, key);
+    console.log("👤 Payload do token:", payload);
     
     const body = await ctx.request.body({ type: "json" }).value;
-    const now = new Date();
+    console.log("📦 Body da requisição:", body);
     
+    const now = new Date();
     const isAdmin = payload.email === 'apexperformgw@gmail.com';
+    console.log("👑 É admin?", isAdmin);
     
     const store = {
       id: crypto.randomUUID(),
@@ -159,6 +178,7 @@ router.post("/api/stores", async (ctx) => {
     };
     
     stores.set(store.id, store);
+    console.log("🏪 Loja criada:", store.id, store.name);
     
     const storeUserKey = `${store.id}-${payload.userId}`;
     storeUsers.set(storeUserKey, {
@@ -167,9 +187,12 @@ router.post("/api/stores", async (ctx) => {
       role: 'admin',
       accepted_at: now.toISOString()
     });
+    console.log("🔗 Vínculo criado:", storeUserKey);
     
     ctx.response.body = store;
+    console.log("✅ Resposta enviada com sucesso");
   } catch (error) {
+    console.error("❌ Erro ao criar loja:", error);
     ctx.response.status = 500;
     ctx.response.body = { error: error.message };
   }
@@ -211,6 +234,98 @@ router.get("/api/store-users", async (ctx) => {
   }
 });
 
+// Nuvemshop OAuth callback
+router.get("/api/nuvemshop/callback", async (ctx) => {
+  console.log("🔗 Callback Nuvemshop recebido");
+  const code = ctx.request.url.searchParams.get('code');
+  const state = ctx.request.url.searchParams.get('state');
+  
+  console.log("Code:", code);
+  console.log("State:", state);
+  
+  if (!code) {
+    ctx.response.redirect(`https://baseflow-jade.vercel.app/nuvemshop/error?error=no_code`);
+    return;
+  }
+  
+  try {
+    // Trocar código por access token
+    const tokenResponse = await fetch('https://www.nuvemshop.com.br/apps/authorize/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: NUVEMSHOP_APP_ID,
+        client_secret: NUVEMSHOP_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code: code
+      })
+    });
+    
+    const tokenData = await tokenResponse.json();
+    console.log("Token data:", tokenData);
+    
+    if (tokenData.access_token) {
+      // Redirecionar com sucesso
+      ctx.response.redirect(`https://baseflow-jade.vercel.app/nuvemshop/success?token=${tokenData.access_token}&store_id=${tokenData.user_id}`);
+    } else {
+      ctx.response.redirect(`https://baseflow-jade.vercel.app/nuvemshop/error?error=token_failed`);
+    }
+  } catch (error) {
+    console.error("Erro no OAuth:", error);
+    ctx.response.redirect(`https://baseflow-jade.vercel.app/nuvemshop/error?error=oauth_failed`);
+  }
+});
+
+// Webhook LGPD - Store redact
+router.post("/api/webhooks/store/redact", async (ctx) => {
+  console.log("🛡️ Webhook store redact recebido");
+  const body = await ctx.request.body({ type: "json" }).value;
+  console.log("Store redact data:", body);
+  
+  // Processar remoção de dados da loja conforme LGPD
+  // Remover todos os dados relacionados à loja
+  
+  ctx.response.status = 200;
+  ctx.response.body = { status: "success", message: "Store data redacted" };
+});
+
+// Webhook LGPD - Customer redact
+router.post("/api/webhooks/customers/redact", async (ctx) => {
+  console.log("🛡️ Webhook customer redact recebido");
+  const body = await ctx.request.body({ type: "json" }).value;
+  console.log("Customer redact data:", body);
+  
+  // Processar remoção de dados do cliente conforme LGPD
+  // Remover todos os dados pessoais do cliente
+  
+  ctx.response.status = 200;
+  ctx.response.body = { status: "success", message: "Customer data redacted" };
+});
+
+// Webhook LGPD - Customer data request
+router.post("/api/webhooks/customers/data_request", async (ctx) => {
+  console.log("📊 Webhook customer data request recebido");
+  const body = await ctx.request.body({ type: "json" }).value;
+  console.log("Customer data request:", body);
+  
+  // Processar solicitação de dados do cliente conforme LGPD
+  // Retornar todos os dados que você tem sobre o cliente
+  
+  ctx.response.status = 200;
+  ctx.response.body = { 
+    status: "success", 
+    message: "Customer data request processed",
+    data: {
+      // Aqui você retornaria os dados do cliente
+      customer_id: body.customer_id,
+      email: body.email,
+      // ... outros dados
+    }
+  };
+});
+
 // Atualizar loja
 router.put("/api/stores/:id", async (ctx) => {
   try {
@@ -244,9 +359,18 @@ router.put("/api/stores/:id", async (ctx) => {
   }
 });
 
-app.use(oakCors()); 
-app.use(router.routes());
+app.use(oakCors());
 app.use(router.allowedMethods());
 
-console.log("Servidor Deno rodando na porta 8000...");
+console.log("🚀 Servidor Deno rodando na porta 8000...");
+console.log("📍 Rotas disponíveis:");
+console.log("  GET  /api/hello");
+console.log("  POST /api/auth/register");
+console.log("  POST /api/auth/login");
+console.log("  GET  /api/auth/me");
+console.log("  POST /api/stores");
+console.log("  GET  /api/stores");
+console.log("  GET  /api/store-users");
+console.log("  PUT  /api/stores/:id");
+console.log("\n🔗 URL completa: https://apexperform-baseflow-10.deno.dev");
 await app.listen({ port: 8000 });
