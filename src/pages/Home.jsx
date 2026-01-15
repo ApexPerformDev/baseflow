@@ -69,7 +69,12 @@ export default function Home() {
   });
 
   const handleCreateStore = async (formData) => {
-    await createStoreMutation.mutateAsync(formData);
+    console.log('🏪 Creating store with data:', formData);
+    try {
+      await createStoreMutation.mutateAsync(formData);
+    } catch (error) {
+      console.error('❌ Store creation failed:', error);
+    }
   };
 
   const getSubscriptionBadge = (status) => {
@@ -84,6 +89,7 @@ export default function Home() {
   };
 
   const handleSelectStore = (store) => {
+    console.log('🏪 Selecting store:', store.name);
     localStorage.setItem('currentStore', JSON.stringify({
       id: store.id,
       name: store.name,

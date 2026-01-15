@@ -32,7 +32,7 @@ class Base44Client {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Network error' }));
+      const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       throw new Error(error.error || `HTTP ${response.status}`);
     }
 

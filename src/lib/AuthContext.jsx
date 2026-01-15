@@ -23,10 +23,9 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       setAuthError(null);
     } catch (error) {
-      console.log('Usuário não autenticado');
       setUser(null);
       setIsAuthenticated(false);
-      setAuthError(null); // Não mostrar erro se não estiver logado
+      setAuthError(null);
     } finally {
       setIsLoadingAuth(false);
     }
