@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,7 @@ import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 export default function Login() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -28,9 +29,14 @@ export default function Login() {
     setLoading(true);
 
     try {
+      // O base44.auth.login já salva o token no localStorage internamente
       await base44.auth.login(formData.email, formData.password);
-      window.location.href = '/';
+      
+      // Usamos navigate('/') em vez de window.location.href para evitar
+      // refresh total da página e perda de estado do React Router
+      navigate('/');
     } catch (err) {
+      console.error("Erro no login:", err);
       setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.');
     } finally {
       setLoading(false);

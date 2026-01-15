@@ -4,25 +4,20 @@ class Base44Client {
   constructor() {
     this.token = localStorage.getItem("auth_token");
 
-    // Helper para criar handlers de integração (Garante que 'this' funcione e evita repetição)
+    // Helper ajustado para bater com as rotas do seu servidor Deno
     const createIntegrationHandler = (name) => ({
       getAuthUrl: async (params) => {
-        const query = params
-          ? "?" + new URLSearchParams(params).toString()
-          : "";
-        return this.request(
-          `/integrations/${name.toLowerCase()}/auth-url${query}`
-        );
+        // Ajustado: Removido o prefixo extra para alinhar com o router.get("/api/nuvemshop/auth")
+        return this.request(`/${name.toLowerCase()}/auth`);
       },
       invoke: async (action, data) => {
-        return this.request(`/integrations/${name.toLowerCase()}/${action}`, {
+        return this.request(`/${name.toLowerCase()}/${action}`, {
           method: "POST",
           body: JSON.stringify(data),
         });
       },
     });
 
-    // Configuração dinâmica para Integrations (Resolve o erro de undefined para qualquer nome)
     const manualIntegrations = {
       Core: {
         CreateStripeCheckoutSession: async (data) => {
@@ -32,7 +27,7 @@ class Base44Client {
           });
         },
       },
-      // Definições explícitas para garantir compatibilidade com desestruturação e spread operator {...}
+      // Definições para Nuvemshop
       Nuvemshop: createIntegrationHandler("nuvemshop"),
       nuvemshop: createIntegrationHandler("nuvemshop"),
       NuvemShop: createIntegrationHandler("nuvemshop"),
@@ -45,7 +40,7 @@ class Base44Client {
 
         if (prop === "invoke") {
           return async (integration, action, data) => {
-            return this.request(`/integrations/${integration}/${action}`, {
+            return this.request(`/${integration}/${action}`, {
               method: "POST",
               body: JSON.stringify(data),
             });
@@ -54,16 +49,11 @@ class Base44Client {
 
         return {
           getAuthUrl: async (params) => {
-            const query = params
-              ? "?" + new URLSearchParams(params).toString()
-              : "";
-            return this.request(
-              `/integrations/${String(prop).toLowerCase()}/auth-url${query}`
-            );
+            return this.request(`/${String(prop).toLowerCase()}/auth`);
           },
           invoke: async (action, data) => {
             return this.request(
-              `/integrations/${String(prop).toLowerCase()}/${action}`,
+              `/${String(prop).toLowerCase()}/${action}`,
               {
                 method: "POST",
                 body: JSON.stringify(data),
@@ -100,6 +90,12 @@ class Base44Client {
       ...options,
       headers,
     });
+
+    // Se o backend enviar um redirect (como na Nuvemshop), tratamos aqui
+    if (response.redirected) {
+      window.location.href = response.url;
+      return;
+    }
 
     if (!response.ok) {
       const error = await response
@@ -139,15 +135,6 @@ class Base44Client {
     },
   };
 
-  functions = {
-    invoke: async (functionName, data) => {
-      return this.request(`/functions/${functionName}`, {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
-    },
-  };
-
   entities = {
     Store: {
       create: async (storeData) => {
@@ -156,15 +143,12 @@ class Base44Client {
           body: JSON.stringify(storeData),
         });
       },
-
       list: async () => {
         return this.request("/stores");
       },
-
       get: async (id) => {
         return this.request(`/stores/${id}`);
       },
-
       update: async (id, data) => {
         return this.request(`/stores/${id}`, {
           method: "PUT",
@@ -172,48 +156,9 @@ class Base44Client {
         });
       },
     },
-
     StoreUser: {
-      filter: async (filters) => {
+      filter: async () => {
         return this.request("/store-users");
-      },
-    },
-
-    Integration: {
-      create: async (data) => {
-        return this.request("/integrations", {
-          method: "POST",
-          body: JSON.stringify(data),
-        });
-      },
-      filter: async (filters) => {
-        const query = filters
-          ? "?" + new URLSearchParams(filters).toString()
-          : "";
-        return this.request(`/integrations${query}`);
-      },
-      delete: async (id) => {
-        return this.request(`/integrations/${id}`, {
-          method: "DELETE",
-        });
-      },
-    },
-
-    Order: {
-      filter: async (filters) => {
-        return [];
-      },
-    },
-
-    Customer: {
-      filter: async (filters) => {
-        return [];
-      },
-    },
-
-    RFMAnalysis: {
-      filter: async (filters) => {
-        return [];
       },
     },
   };
