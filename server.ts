@@ -25,6 +25,51 @@ const users = new Map();
 const stores = new Map();
 const storeUsers = new Map();
 
+// Deno KV para persistência
+const kv = await Deno.openKv();
+
+// Carregar dados do KV na inicialização
+async function loadData() {
+  const userEntries = kv.list({ prefix: ["users"] });
+  for await (const entry of userEntries) {
+    const email = entry.key[1];
+    users.set(email, entry.value);
+  }
+  
+  const storeEntries = kv.list({ prefix: ["stores"] });
+  for await (const entry of storeEntries) {
+    const storeId = entry.key[1];
+    stores.set(storeId, entry.value);
+  }
+  
+  const storeUserEntries = kv.list({ prefix: ["store_users"] });
+  for await (const entry of storeUserEntries) {
+    const key = entry.key[1];
+    storeUsers.set(key, entry.value);
+  }
+  
+  console.log(`📊 Dados carregados: ${users.size} usuários, ${stores.size} lojas, ${storeUsers.size} vínculos`);
+}
+
+// Salvar dados no KV
+async function saveUser(email, user) {
+  await kv.set(["users", email], user);
+  users.set(email, user);
+}
+
+async function saveStore(storeId, store) {
+  await kv.set(["stores", storeId], store);
+  stores.set(storeId, store);
+}
+
+async function saveStoreUser(key, storeUser) {
+  await kv.set(["store_users", key], storeUser);
+  storeUsers.set(key, storeUser);
+}
+
+// Carregar dados na inicialização
+await loadData();
+
 // Rota de teste
 router.get("/api/hello", (ctx) => {
   ctx.response.body = { 
@@ -58,7 +103,7 @@ router.post("/api/auth/register", async (ctx) => {
       created_at: new Date().toISOString()
     };
 
-    users.set(email, user);
+    await saveUser(email, user);
 
     const token = await create(
       { alg: "HS256", typ: "JWT" },
@@ -177,11 +222,11 @@ router.post("/api/stores", async (ctx) => {
       created_date: now.toISOString()
     };
     
-    stores.set(store.id, store);
+    await saveStore(store.id, store);
     console.log("🏪 Loja criada:", store.id, store.name);
     
     const storeUserKey = `${store.id}-${payload.userId}`;
-    storeUsers.set(storeUserKey, {
+    await saveStoreUser(storeUserKey, {
       store_id: store.id,
       user_email: payload.email,
       role: 'admin',
@@ -350,7 +395,7 @@ router.put("/api/stores/:id", async (ctx) => {
     }
     
     const updatedStore = { ...store, ...body };
-    stores.set(storeId, updatedStore);
+    await saveStore(storeId, updatedStore);
     
     ctx.response.body = updatedStore;
   } catch (error) {
