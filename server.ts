@@ -26,45 +26,79 @@ const stores = new Map();
 const storeUsers = new Map();
 
 // Deno KV para persistência
-const kv = await Deno.openKv();
+let kv;
+try {
+  kv = await Deno.openKv();
+  console.log("✅ Deno KV conectado");
+} catch (error) {
+  console.log("⚠️ Deno KV não disponível, usando apenas memória:", error.message);
+  kv = null;
+}
 
 // Carregar dados do KV na inicialização
 async function loadData() {
-  const userEntries = kv.list({ prefix: ["users"] });
-  for await (const entry of userEntries) {
-    const email = entry.key[1];
-    users.set(email, entry.value);
+  if (!kv) {
+    console.log("📊 Usando apenas memória (sem persistência)");
+    return;
   }
   
-  const storeEntries = kv.list({ prefix: ["stores"] });
-  for await (const entry of storeEntries) {
-    const storeId = entry.key[1];
-    stores.set(storeId, entry.value);
+  try {
+    const userEntries = kv.list({ prefix: ["users"] });
+    for await (const entry of userEntries) {
+      const email = entry.key[1];
+      users.set(email, entry.value);
+    }
+    
+    const storeEntries = kv.list({ prefix: ["stores"] });
+    for await (const entry of storeEntries) {
+      const storeId = entry.key[1];
+      stores.set(storeId, entry.value);
+    }
+    
+    const storeUserEntries = kv.list({ prefix: ["store_users"] });
+    for await (const entry of storeUserEntries) {
+      const key = entry.key[1];
+      storeUsers.set(key, entry.value);
+    }
+    
+    console.log(`📊 Dados carregados: ${users.size} usuários, ${stores.size} lojas, ${storeUsers.size} vínculos`);
+  } catch (error) {
+    console.log("⚠️ Erro ao carregar dados do KV:", error.message);
   }
-  
-  const storeUserEntries = kv.list({ prefix: ["store_users"] });
-  for await (const entry of storeUserEntries) {
-    const key = entry.key[1];
-    storeUsers.set(key, entry.value);
-  }
-  
-  console.log(`📊 Dados carregados: ${users.size} usuários, ${stores.size} lojas, ${storeUsers.size} vínculos`);
 }
 
 // Salvar dados no KV
 async function saveUser(email, user) {
-  await kv.set(["users", email], user);
   users.set(email, user);
+  if (kv) {
+    try {
+      await kv.set(["users", email], user);
+    } catch (error) {
+      console.log("⚠️ Erro ao salvar usuário no KV:", error.message);
+    }
+  }
 }
 
 async function saveStore(storeId, store) {
-  await kv.set(["stores", storeId], store);
   stores.set(storeId, store);
+  if (kv) {
+    try {
+      await kv.set(["stores", storeId], store);
+    } catch (error) {
+      console.log("⚠️ Erro ao salvar loja no KV:", error.message);
+    }
+  }
 }
 
 async function saveStoreUser(key, storeUser) {
-  await kv.set(["store_users", key], storeUser);
   storeUsers.set(key, storeUser);
+  if (kv) {
+    try {
+      await kv.set(["store_users", key], storeUser);
+    } catch (error) {
+      console.log("⚠️ Erro ao salvar vínculo no KV:", error.message);
+    }
+  }
 }
 
 // Carregar dados na inicialização
@@ -80,11 +114,16 @@ router.get("/api/hello", (ctx) => {
 
 // Registro de usuário
 router.post("/api/auth/register", async (ctx) => {
+  console.log("📝 Recebida requisição POST /api/auth/register");
+  console.log("Headers:", Object.fromEntries(ctx.request.headers.entries()));
+  
   try {
     const body = await ctx.request.body({ type: "json" }).value;
+    console.log("📦 Body da requisição:", body);
     const { email, password, name } = body;
 
     if (users.has(email)) {
+      console.log("❌ Usuário já existe:", email);
       ctx.response.status = 400;
       ctx.response.body = { error: "Usuário já existe" };
       return;
@@ -104,6 +143,7 @@ router.post("/api/auth/register", async (ctx) => {
     };
 
     await saveUser(email, user);
+    console.log("👤 Usuário criado:", email);
 
     const token = await create(
       { alg: "HS256", typ: "JWT" },
@@ -112,7 +152,9 @@ router.post("/api/auth/register", async (ctx) => {
     );
 
     ctx.response.body = { user: { id: user.id, email: user.email, name: user.name }, token };
+    console.log("✅ Resposta enviada com sucesso");
   } catch (error) {
+    console.error("❌ Erro ao registrar usuário:", error);
     ctx.response.status = 500;
     ctx.response.body = { error: error.message };
   }
@@ -404,7 +446,12 @@ router.put("/api/stores/:id", async (ctx) => {
   }
 });
 
-app.use(oakCors());
+app.use(oakCors({
+  origin: ["https://baseflow-jade.vercel.app", "http://localhost:3000", "http://localhost:5173"],
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+app.use(router.routes());
 app.use(router.allowedMethods());
 
 console.log("🚀 Servidor Deno rodando na porta 8000...");
