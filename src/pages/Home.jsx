@@ -1,51 +1,60 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
-import { createPageUrl } from '../utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Store, Plus, ArrowRight, Shield, User as UserIcon } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
-import CreateStoreDialog from '../components/store/CreateStoreDialog';
+import React, { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { createPageUrl } from "../utils";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Store,
+  Plus,
+  ArrowRight,
+  Shield,
+  User as UserIcon,
+} from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import CreateStoreDialog from "../components/store/CreateStoreDialog";
 
 export default function Home() {
   const [user, setUser] = useState(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    base44.auth.me()
-      .then(u => setUser(u))
+    base44.auth
+      .me()
+      .then((u) => setUser(u))
       .catch(() => {
         // MODO LOCAL: Não redirecionar em caso de erro
-        setUser({ email: 'local@test.com' });
+        setUser({ email: "local@test.com" });
       });
   }, []);
 
   const { data: storeUsers = [], isLoading } = useQuery({
-    queryKey: ['storeUsers', user?.email],
+    queryKey: ["storeUsers", user?.email],
     queryFn: async () => {
       if (!user?.email) return [];
       return await base44.entities.StoreUser.filter({ user_email: user.email });
     },
-    enabled: !!user?.email
+    enabled: !!user?.email,
   });
 
   const { data: stores = [] } = useQuery({
-    queryKey: ['stores', storeUsers],
+    queryKey: ["stores", storeUsers],
     queryFn: async () => {
       if (storeUsers.length === 0) return [];
-      const storeIds = storeUsers.map(su => su.store_id);
+      const storeIds = storeUsers.map((su) => su.store_id);
       const allStores = await base44.entities.Store.list();
-      return allStores.filter(s => storeIds.includes(s.id));
+      return allStores.filter((s) => storeIds.includes(s.id));
     },
-    enabled: storeUsers.length > 0
+    enabled: storeUsers.length > 0,
   });
 
   const getStoreRole = (storeId) => {
-    const storeUser = storeUsers.find(su => su.store_id === storeId);
-    return storeUser?.role || 'basic';
+    const storeUser = storeUsers.find((su) => su.store_id === storeId);
+    return storeUser?.role || "basic";
   };
 
   const createStoreMutation = useMutation({
@@ -54,49 +63,74 @@ export default function Home() {
       return store;
     },
     onSuccess: async (store) => {
-      await queryClient.invalidateQueries({ queryKey: ['storeUsers'] });
-      await queryClient.invalidateQueries({ queryKey: ['stores'] });
-      
-      localStorage.setItem('currentStore', JSON.stringify({
-        id: store.id,
-        name: store.name,
-        subscription_status: store.subscription_status,
-        trial_end_at: store.trial_end_at,
-        role: 'admin'
-      }));
-      window.location.href = createPageUrl('Dashboard');
-    }
+      await queryClient.invalidateQueries({ queryKey: ["storeUsers"] });
+      await queryClient.invalidateQueries({ queryKey: ["stores"] });
+
+      localStorage.setItem(
+        "currentStore",
+        JSON.stringify({
+          id: store.id,
+          name: store.name,
+          subscription_status: store.subscription_status,
+          trial_end_at: store.trial_end_at,
+          role: "admin",
+        })
+      );
+      navigate(createPageUrl("Dashboard"));
+    },
   });
 
   const handleCreateStore = async (formData) => {
-    console.log('🏪 Creating store with data:', formData);
+    console.log("🏪 Creating store with data:", formData);
     try {
       await createStoreMutation.mutateAsync(formData);
     } catch (error) {
-      console.error('❌ Store creation failed:', error);
+      console.error("❌ Store creation failed:", error);
     }
   };
 
   const getSubscriptionBadge = (status) => {
     const badges = {
-      TRIAL: { label: 'Trial', variant: 'secondary', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
-      ACTIVE: { label: 'Ativa', variant: 'default', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-      EXPIRED: { label: 'Expirada', variant: 'destructive', className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
-      CANCELLED: { label: 'Cancelada', variant: 'secondary', className: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200' }
+      TRIAL: {
+        label: "Trial",
+        variant: "secondary",
+        className:
+          "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+      },
+      ACTIVE: {
+        label: "Ativa",
+        variant: "default",
+        className:
+          "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      },
+      EXPIRED: {
+        label: "Expirada",
+        variant: "destructive",
+        className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+      },
+      CANCELLED: {
+        label: "Cancelada",
+        variant: "secondary",
+        className:
+          "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
+      },
     };
     const badge = badges[status] || badges.TRIAL;
     return <Badge className={badge.className}>{badge.label}</Badge>;
   };
 
   const handleSelectStore = (store) => {
-    console.log('🏪 Selecting store:', store.name);
-    localStorage.setItem('currentStore', JSON.stringify({
-      id: store.id,
-      name: store.name,
-      subscription_status: store.subscription_status,
-      role: getStoreRole(store.id)
-    }));
-    window.location.href = createPageUrl('Dashboard');
+    console.log("🏪 Selecting store:", store.name);
+    localStorage.setItem(
+      "currentStore",
+      JSON.stringify({
+        id: store.id,
+        name: store.name,
+        subscription_status: store.subscription_status,
+        role: getStoreRole(store.id),
+      })
+    );
+    navigate(createPageUrl("Dashboard"));
   };
 
   return (
@@ -120,9 +154,9 @@ export default function Home() {
                 </p>
               </div>
             </div>
-            <Button 
-              variant="outline" 
-              onClick={() => base44.auth.logout()} 
+            <Button
+              variant="outline"
+              onClick={() => base44.auth.logout()}
               className="bg-transparent border-[#2A2A2A] text-[#E5E5E5] hover:bg-[#1E1E1E]"
             >
               Sair
@@ -139,8 +173,18 @@ export default function Home() {
               readOnly
             />
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A7A7A]">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
             </div>
           </div>
@@ -150,8 +194,11 @@ export default function Home() {
         <div className="mb-8">
           {isLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="bg-[#1E1E1E] rounded-lg p-4 border border-[#2A2A2A]">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-[#1E1E1E] rounded-lg p-4 border border-[#2A2A2A]"
+                >
                   <Skeleton className="h-6 w-3/4 mb-2 bg-[#2A2A2A]" />
                   <Skeleton className="h-4 w-1/2 bg-[#2A2A2A]" />
                 </div>
@@ -167,7 +214,7 @@ export default function Home() {
                 <p className="text-[#9F9F9F] mb-6">
                   Você ainda não tem acesso a nenhuma empresa.
                 </p>
-                <Button 
+                <Button
                   className="bg-[#3B82F6] hover:bg-[#4C8DFF] text-white"
                   onClick={() => setShowCreateDialog(true)}
                 >
@@ -178,7 +225,7 @@ export default function Home() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {stores.map(store => {
+              {stores.map((store) => {
                 const firstLetter = store.name.charAt(0).toUpperCase();
                 return (
                   <button
@@ -194,10 +241,10 @@ export default function Home() {
                         {store.name}
                       </h3>
                       <p className="text-sm text-[#9F9F9F]">
-                        Plano {store.plan_type || 'Starter'}
+                        Plano {store.plan_type || "Starter"}
                       </p>
                     </div>
-                    {store.subscription_status === 'ACTIVE' && (
+                    {store.subscription_status === "ACTIVE" && (
                       <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></div>
                     )}
                   </button>

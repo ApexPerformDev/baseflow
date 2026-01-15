@@ -80,6 +80,10 @@ class Base44Client {
         return this.request('/stores');
       },
 
+      get: async (id) => {
+        return this.request(`/stores/${id}`);
+      },
+
       update: async (id, data) => {
         return this.request(`/stores/${id}`, {
           method: 'PUT',
