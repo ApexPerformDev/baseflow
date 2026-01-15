@@ -84,7 +84,7 @@ export default function IntegrationCard({
   const handleNuvemshopOAuth = async () => {
     setLoading(true);
     try {
-      const response = await base44.integrations.nuvemshop.invoke("auth-url", {
+      const response = await base44.integrations.nuvemshop.getAuthUrl({
         store_id: storeId,
       });
 

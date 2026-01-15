@@ -6,8 +6,13 @@ class Base44Client {
 
     // Helper para criar handlers de integração (Garante que 'this' funcione e evita repetição)
     const createIntegrationHandler = (name) => ({
-      getAuthUrl: async () => {
-        return this.request(`/integrations/${name.toLowerCase()}/auth-url`);
+      getAuthUrl: async (params) => {
+        const query = params
+          ? "?" + new URLSearchParams(params).toString()
+          : "";
+        return this.request(
+          `/integrations/${name.toLowerCase()}/auth-url${query}`
+        );
       },
       invoke: async (action, data) => {
         return this.request(`/integrations/${name.toLowerCase()}/${action}`, {
@@ -28,10 +33,10 @@ class Base44Client {
         },
       },
       // Definições explícitas para garantir compatibilidade com desestruturação e spread operator {...}
-      Nuvemshop: createIntegrationHandler('nuvemshop'),
-      nuvemshop: createIntegrationHandler('nuvemshop'),
-      NuvemShop: createIntegrationHandler('nuvemshop'),
-      nuvem_shop: createIntegrationHandler('nuvemshop'),
+      Nuvemshop: createIntegrationHandler("nuvemshop"),
+      nuvemshop: createIntegrationHandler("nuvemshop"),
+      NuvemShop: createIntegrationHandler("nuvemshop"),
+      nuvem_shop: createIntegrationHandler("nuvemshop"),
     };
 
     this.integrations = new Proxy(manualIntegrations, {
@@ -48,9 +53,12 @@ class Base44Client {
         }
 
         return {
-          getAuthUrl: async () => {
+          getAuthUrl: async (params) => {
+            const query = params
+              ? "?" + new URLSearchParams(params).toString()
+              : "";
             return this.request(
-              `/integrations/${String(prop).toLowerCase()}/auth-url`
+              `/integrations/${String(prop).toLowerCase()}/auth-url${query}`
             );
           },
           invoke: async (action, data) => {
@@ -179,7 +187,9 @@ class Base44Client {
         });
       },
       filter: async (filters) => {
-        const query = filters ? '?' + new URLSearchParams(filters).toString() : '';
+        const query = filters
+          ? "?" + new URLSearchParams(filters).toString()
+          : "";
         return this.request(`/integrations${query}`);
       },
       delete: async (id) => {
