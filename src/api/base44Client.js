@@ -125,6 +125,19 @@ class Base44Client {
           body: JSON.stringify(data)
         });
       }
+    },
+
+    Nuvemshop: {
+      getAuthUrl: async () => {
+        return this.request('/integrations/nuvemshop/auth-url');
+      },
+      // Adicionado para compatibilidade caso seu código esteja chamando .invoke()
+      invoke: async (action, data) => {
+        return this.request(`/integrations/nuvemshop/${action}`, {
+          method: 'POST',
+          body: JSON.stringify(data)
+        });
+      }
     }
   };
 }

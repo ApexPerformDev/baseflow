@@ -120,6 +120,12 @@ export default function Home() {
   };
 
   const handleSelectStore = (store) => {
+    // Lógica de Proteção: Se a loja estiver desativada, não carrega o Dashboard (economiza DB e evita erros)
+    if (store.subscription_status === 'EXPIRED' || store.subscription_status === 'CANCELLED') {
+      alert(`A loja "${store.name}" está desativada. Renove a assinatura para acessar as métricas.`);
+      return; // Para a execução aqui, impedindo a navegação e o erro 404
+    }
+
     console.log("🏪 Selecting store:", store.name);
     localStorage.setItem(
       "currentStore",
